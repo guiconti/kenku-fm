@@ -20,6 +20,7 @@ type Channel =
   | "BROWSER_VIEW_MEDIA_STARTED_PLAYING"
   | "BROWSER_VIEW_MEDIA_PAUSED"
   | "BROWSER_VIEW_NEW_TAB"
+  | "BROWSER_STREAM"
   | "BROWSER_VIEW_CLOSE_TAB"
   | "PLAYER_REMOTE_ENABLED";
 
@@ -39,14 +40,15 @@ const validChannels: Channel[] = [
   "BROWSER_VIEW_MEDIA_STARTED_PLAYING",
   "BROWSER_VIEW_MEDIA_PAUSED",
   "BROWSER_VIEW_NEW_TAB",
+  "BROWSER_STREAM",
   "BROWSER_VIEW_CLOSE_TAB",
   "PLAYER_REMOTE_ENABLED",
 ];
 
 // Capture audio when new views are loaded
-ipcRenderer.on("BROWSER_VIEW_LOADED",  (_, viewId: number) => {
+ipcRenderer.on("BROWSER_VIEW_LOADED", (_, viewId: number) => {
   ipcRenderer.send("AUDIO_CAPTURE_START_BROWSER_VIEW_STREAM", viewId);
-})
+});
 
 const api = {
   connect: (token: string) => {
@@ -88,6 +90,9 @@ const api = {
   },
   showBrowserView: (id: number) => {
     viewManager.showBrowserView(id);
+  },
+  removeAllBrowserViews: () => {
+    ipcRenderer.sendSync("BROWSER_VIEW_REMOVE_ALL_BROWSER_VIEWS");
   },
   setBrowserViewBounds: (
     id: number,
