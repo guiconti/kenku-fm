@@ -2,7 +2,7 @@ import { Howl } from "howler";
 import { TypedEmitter } from "tiny-typed-emitter";
 
 export interface SoundEvents {
-  error: () => void;
+  error: (error: unknown) => void;
   load: (duration: number) => void;
   end: () => void;
 }
@@ -73,8 +73,8 @@ export class Sound extends TypedEmitter<SoundEvents> {
           }
         };
 
-        const handleError = () => {
-          this.emit("error");
+        const handleError = (soundId?: number, error?: unknown) => {
+          this.emit("error", error);
         };
 
         if (crossFade) {
@@ -83,7 +83,10 @@ export class Sound extends TypedEmitter<SoundEvents> {
         howl.on("load", handleLoad);
         howl.on("end", handleEnd);
         howl.on("loaderror", handleError);
-        howl.on("playerror", handleError);
+        howl.on("playerror", (soundId, error) => {
+          console.log(error);
+          handleError(soundId, error);
+        });
 
         const howlSound = (howl as any)._sounds[0];
         if (!howlSound) {
@@ -94,7 +97,7 @@ export class Sound extends TypedEmitter<SoundEvents> {
       };
       createHowlerInstance();
     } catch {
-      this.emit("error");
+      this.emit("error", "");
     }
   }
 

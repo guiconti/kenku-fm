@@ -1,11 +1,19 @@
 import { BrowserWindow, ipcMain } from "electron";
-import { ChannelType, Client, Events, GatewayIntentBits } from "discord.js";
+import {
+  ChannelType,
+  Client,
+  Events,
+  Channel,
+  GatewayIntentBits,
+} from "discord.js";
 import {
   createAudioPlayer,
   getVoiceConnection,
   joinVoiceChannel,
   NoSubscriberBehavior,
+  createAudioResource,
 } from "@discordjs/voice";
+import { ipcRenderer } from "electron";
 
 type VoiceChannel = {
   id: string;
@@ -18,6 +26,12 @@ type Guild = {
   icon: string;
   voiceChannels: VoiceChannel[];
 };
+
+enum MessageType {
+  NOT_DEFINED = -1,
+  JOIN = 0,
+  PLAY = 1,
+}
 
 export class DiscordBroadcast {
   window: BrowserWindow;
@@ -33,7 +47,7 @@ export class DiscordBroadcast {
     this.window = window;
     ipcMain.on("DISCORD_CONNECT", this._handleConnect);
     ipcMain.on("DISCORD_DISCONNECT", this._handleDisconnect);
-    ipcMain.on("DISCORD_JOIN_CHANNEL", this._handleJoinChannel);
+    ipcMain.on("DISCORD_JOIN_CHANNEL", this._handleClickJoinChannel);
     ipcMain.on("DISCORD_LEAVE_CHANNEL", this._handleLeaveChannel);
     this.audioPlayer.on("error", this._handleBroadcastError);
   }
@@ -41,11 +55,28 @@ export class DiscordBroadcast {
   destroy() {
     ipcMain.off("DISCORD_CONNECT", this._handleConnect);
     ipcMain.off("DISCORD_DISCONNECT", this._handleDisconnect);
-    ipcMain.off("DISCORD_JOIN_CHANNEL", this._handleJoinChannel);
+    ipcMain.off("DISCORD_JOIN_CHANNEL", this._handleClickJoinChannel);
     ipcMain.off("DISCORD_LEAVE_CHANNEL", this._handleLeaveChannel);
     this.audioPlayer.off("error", this._handleBroadcastError);
     this.client?.destroy();
     this.client = undefined;
+  }
+
+  getMessageType(message: string): MessageType {
+    if (message.includes("kassino") || message.includes("kassinao")) {
+      return MessageType.JOIN;
+    }
+    if (
+      message.match(
+        /^play ((?:https?:)?\/\/)?((?:www|m)\.)?((?:youtube\.com|youtu.be))(\/(?:[\w\-]+\?v=|embed\/|v\/)?)([\w\-]+)(\S+)?/gim
+      ) ||
+      message.match(
+        /^play (https?:\/\/open.spotify.com\/(track|user|artist|album)\/[a-zA-Z0-9]+(\/playlist\/[a-zA-Z0-9]+|)|spotify:(track|user|artist|album):[a-zA-Z0-9]+(:playlist:[a-zA-Z0-9]+|))/gim
+      )
+    ) {
+      return MessageType.PLAY;
+    }
+    return MessageType.NOT_DEFINED;
   }
 
   _handleConnect = async (event: Electron.IpcMainEvent, token: string) => {
@@ -61,7 +92,12 @@ export class DiscordBroadcast {
 
     try {
       this.client = new Client({
-        intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
+        intents: [
+          GatewayIntentBits.Guilds,
+          GatewayIntentBits.GuildVoiceStates,
+          GatewayIntentBits.GuildMessages,
+          GatewayIntentBits.MessageContent,
+        ],
       });
       this.client.once(Events.ClientReady, async () => {
         event.reply("DISCORD_READY");
@@ -70,7 +106,7 @@ export class DiscordBroadcast {
         const guilds: Guild[] = await Promise.all(
           rawGuilds.map(async (baseGuild) => {
             const guild = await baseGuild.fetch();
-            let voiceChannels: VoiceChannel[] = [];
+            const voiceChannels: VoiceChannel[] = [];
             const channels = await guild.channels.fetch();
             channels.forEach((channel) => {
               if (channel.type === ChannelType.GuildVoice) {
@@ -90,6 +126,44 @@ export class DiscordBroadcast {
         );
         event.reply("DISCORD_GUILDS", guilds);
       });
+      this.client.on(Events.MessageCreate, async (message) => {
+        if (!message) return;
+        const messageContent = message.content.toLowerCase();
+        const messageType = this.getMessageType(messageContent);
+        let matches = [];
+        let url = undefined;
+        switch (messageType) {
+          case MessageType.JOIN:
+            event.reply("DISCORD_FORCE_JOIN", message.member.voice.channel.id);
+            this.playIntro();
+            break;
+          case MessageType.PLAY:
+            matches = message.content.match(
+              /((?:https?:)?\/\/)?((?:www|m)\.)?((?:youtube\.com|youtu.be))(\/(?:[\w\-]+\?v=|embed\/|v\/)?)([\w\-]+)(\S+)?/gim
+            );
+            // TODO: Iterate through list of regex instead lol
+            if (matches && matches.length > 0) {
+              url = matches[0];
+            } else {
+              matches = message.content.match(
+                /(https?:\/\/open.spotify.com\/(track|user|artist|album)\/[a-zA-Z0-9]+(\/playlist\/[a-zA-Z0-9]+|)|spotify:(track|user|artist|album):[a-zA-Z0-9]+(:playlist:[a-zA-Z0-9]+|))/gim
+              );
+              if (matches && matches.length > 0) {
+                url = matches[0];
+              }
+            }
+            if (url) {
+              event.reply(
+                "DISCORD_FORCE_JOIN",
+                message.member.voice.channel.id
+              );
+              this.window.webContents.send("BROWSER_STREAM", matches[0]);
+            }
+            break;
+          default:
+            break;
+        }
+      });
       this.client.on("error", (err) => {
         event.reply("DISCORD_DISCONNECTED");
         event.reply("ERROR", `Error connecting to bot: ${err.message}`);
@@ -101,6 +175,16 @@ export class DiscordBroadcast {
     }
   };
 
+  playIntro(): void {
+    const windows = BrowserWindow.getAllWindows();
+    for (const window of windows) {
+      window.webContents.send(
+        "BROWSER_STREAM",
+        "https://www.youtube.com/watch?v=K0RAuw68yqM"
+      );
+    }
+  }
+
   _handleDisconnect = async (event: Electron.IpcMainEvent) => {
     event.reply("DISCORD_DISCONNECTED");
     event.reply("DISCORD_GUILDS", []);
@@ -109,7 +193,7 @@ export class DiscordBroadcast {
     this.client = undefined;
   };
 
-  _handleJoinChannel = async (
+  _handleClickJoinChannel = async (
     event: Electron.IpcMainEvent,
     channelId: string
   ) => {

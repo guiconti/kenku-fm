@@ -19,7 +19,8 @@ export function useSoundboardPlayback(onError: (message: string) => void) {
         soundsRef.current[sound.id].stop(false);
         delete soundsRef.current[sound.id];
       }
-
+      console.log("Play");
+      console.log(sound);
       const playback = new Sound({
         src: sound.url,
         volume: sound.volume,
@@ -43,10 +44,13 @@ export function useSoundboardPlayback(onError: (message: string) => void) {
         delete soundsRef.current[sound.id];
       });
 
-      playback.on("error", () => {
+      playback.on("error", (error) => {
+        console.log("soundboard error");
         delete soundsRef.current[sound.id];
         dispatch(stopSound(sound.id));
-        onError(`Unable to play sound: ${sound.title}`);
+        // onError(`Unable to play sound: ${sound.title}`);
+        // @ts-ignore
+        onError(error);
       });
 
       soundsRef.current[sound.id] = playback;

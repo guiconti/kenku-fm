@@ -44,6 +44,10 @@ export function OutputListItems() {
       dispatch(addOutput(args[0]));
     });
 
+    window.kenku.on("DISCORD_FORCE_JOIN", (args) => {
+      handleChannelChange(args[0]);
+    });
+
     return () => {
       window.kenku.removeAllListeners("DISCORD_GUILDS");
       window.kenku.removeAllListeners("DISCORD_CHANNEL_LEFT");

@@ -22,7 +22,8 @@ type Channel =
   | "BROWSER_VIEW_NEW_TAB"
   | "BROWSER_STREAM"
   | "BROWSER_VIEW_CLOSE_TAB"
-  | "PLAYER_REMOTE_ENABLED";
+  | "PLAYER_REMOTE_ENABLED"
+  | "DISCORD_FORCE_JOIN";
 
 const validChannels: Channel[] = [
   "ERROR",
@@ -43,6 +44,7 @@ const validChannels: Channel[] = [
   "BROWSER_STREAM",
   "BROWSER_VIEW_CLOSE_TAB",
   "PLAYER_REMOTE_ENABLED",
+  "DISCORD_FORCE_JOIN",
 ];
 
 // Capture audio when new views are loaded
