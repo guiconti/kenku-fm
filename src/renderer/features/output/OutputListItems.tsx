@@ -73,14 +73,14 @@ export function OutputListItems() {
         } else {
           // Check if the channel is in the same guild as one already selected
           const channelsToGuild: Record<string, string> = {};
-          for (let guild of output.guilds) {
-            for (let channel of guild.voiceChannels) {
+          for (const guild of output.guilds) {
+            for (const channel of guild.voiceChannels) {
               channelsToGuild[channel.id] = guild.id;
             }
           }
           const currentGuild = channelsToGuild[channelId];
           let guildChannel: string;
-          for (let id of output.outputs) {
+          for (const id of output.outputs) {
             const guild = channelsToGuild[id];
             if (guild === currentGuild) {
               guildChannel = id;
@@ -108,6 +108,7 @@ export function OutputListItems() {
         if (prev === "local") {
           window.kenku.setLoopback(false);
         } else {
+          // Only leave channel if selecting a different guild
           window.kenku.leaveChannel(prev);
         }
       }

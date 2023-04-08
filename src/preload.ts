@@ -6,6 +6,7 @@ const viewManager = new BrowserViewManagerPreload();
 
 type Channel =
   | "ERROR"
+  | "FATAL_ERROR"
   | "MESSAGE"
   | "INFO"
   | "DISCORD_READY"
@@ -27,6 +28,7 @@ type Channel =
 
 const validChannels: Channel[] = [
   "ERROR",
+  "FATAL_ERROR",
   "MESSAGE",
   "INFO",
   "DISCORD_READY",
@@ -87,15 +89,19 @@ const api = {
     viewManager.removeBrowserView(id);
     ipcRenderer.send("AUDIO_CAPTURE_STOP_BROWSER_VIEW_STREAM", id);
   },
+  removeAllBrowserViews: () => {
+    viewManager.removeAllBrowserViews();
+    ipcRenderer.send("AUDIO_CAPTURE_STOP_ALL_BROWSER_VIEW_STREAMS");
+  },
   hideBrowserView: (id: number) => {
     viewManager.hideBrowserView(id);
   },
   showBrowserView: (id: number) => {
     viewManager.showBrowserView(id);
   },
-  removeAllBrowserViews: () => {
-    ipcRenderer.sendSync("BROWSER_VIEW_REMOVE_ALL_BROWSER_VIEWS");
-  },
+  // removeAllBrowserViews: () => {
+  //   ipcRenderer.sendSync("BROWSER_VIEW_REMOVE_ALL_BROWSER_VIEWS");
+  // },
   setBrowserViewBounds: (
     id: number,
     x: number,
@@ -170,6 +176,9 @@ const api = {
   },
   close: () => {
     ipcRenderer.send("WINDOW_CLOSE");
+  },
+  clearCache: () => {
+    return ipcRenderer.invoke("CLEAR_CACHE");
   },
   platform: ipcRenderer.sendSync("GET_PLATFORM") as string,
   version: ipcRenderer.sendSync("GET_VERSION") as string,

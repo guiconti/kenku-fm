@@ -59,7 +59,7 @@ jobs:
     steps:
       - install-npm
       - run:
-          name: Install dpkg and fakeroot
+          name: Install dpkg, fakeroot
           command: |
             sudo apt-get update -y
             sudo apt-get install -y dpkg fakeroot rpm
