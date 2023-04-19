@@ -14,8 +14,9 @@ import { BrowserWindow, ipcMain } from "electron";
 //   createAudioResource,
 // } from "@discordjs/voice";
 // import Eris from "eris";
-import { ChannelType, Client, Events, GatewayIntentBits } from "discord.js";
+import { ChannelType, Client, Events, GatewayIntentBits, Partials } from "discord.js";
 import { createAudioPlayer, getVoiceConnection, joinVoiceChannel, NoSubscriberBehavior } from "@discordjs/voice";
+import handleBetMessages from "../bet";
 
 type VoiceChannel = {
 	id: string;
@@ -108,6 +109,7 @@ export class DiscordBroadcast {
 					GatewayIntentBits.DirectMessages,
 					GatewayIntentBits.MessageContent,
 				],
+				partials: [Partials.Channel, Partials.Message],
 			});
 			// this.client = new Eris.Client(token, {
 			// 	// intents: ["guilds", "guildVoiceStates", "guildMessages", "messageContent"],
@@ -141,8 +143,10 @@ export class DiscordBroadcast {
 				event.reply("DISCORD_GUILDS", guilds);
 			});
 			this.client.on(Events.MessageCreate, async (message) => {
-				console.log(message);
-				if (!message) return;
+				if (!message || !this.client) return;
+				const handled = handleBetMessages(message, this.client);
+				if (handled) return;
+				const userId = message.author.id.toString();
 				const messageContent = message.content.toLowerCase();
 				const messageType = this.getMessageType(messageContent);
 				switch (messageType) {
