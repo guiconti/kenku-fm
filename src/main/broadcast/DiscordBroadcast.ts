@@ -17,6 +17,7 @@ import { BrowserWindow, ipcMain } from "electron";
 import { ChannelType, Client, Events, GatewayIntentBits, Partials } from "discord.js";
 import { createAudioPlayer, getVoiceConnection, joinVoiceChannel, NoSubscriberBehavior } from "@discordjs/voice";
 import handleBetMessages from "../bet";
+import handleGuessGame from "../guessGame";
 
 type VoiceChannel = {
 	id: string;
@@ -144,7 +145,10 @@ export class DiscordBroadcast {
 			});
 			this.client.on(Events.MessageCreate, async (message) => {
 				if (!message || !this.client) return;
-				const handled = handleBetMessages(message, this.client);
+				// Handle guess game should come first to override other commands when the game is active
+				let handled = handleGuessGame(message, this.client, event, this.window);
+				if (handled) return;
+				handled = handleBetMessages(message, this.client);
 				if (handled) return;
 				const userId = message.author.id.toString();
 				const messageContent = message.content.toLowerCase();
