@@ -5,10 +5,13 @@ import fs from "fs";
 import path from "path";
 import jimp from "jimp";
 
+// Caverna
 const mainChannelId = "508072355629629451";
+// RIP #AXON
+// const mainChannelId = "144871794246025216"
 
-let globalLeaderboard: { [key: string]: number } = {};
-let currentLeaderboard: { [key: string]: number } = {};
+let globalLeaderboard: { [key: string]: { name: string; score: number } } = {};
+let currentLeaderboard: { [key: string]: { name: string; score: number } } = {};
 let isGameActive = false;
 
 // Holds the game ids that were not picked yet, this is what we use to pick a new game
@@ -59,7 +62,7 @@ async function startGame(message: Message, window: BrowserWindow) {
 	currentLeaderboard = {};
 }
 
-function stopGame() {
+function stopGame(message: Message) {
 	console.log("Guess game stopped");
 	if (notGuessTimeout) {
 		clearTimeout(notGuessTimeout);
@@ -67,9 +70,19 @@ function stopGame() {
 	if (hintTimeout) {
 		clearTimeout(hintTimeout);
 	}
+	if (enlargeImageTimeout) {
+		clearTimeout(enlargeImageTimeout);
+	}
 	isGameActive = false;
 	pickedSong = undefined;
 	gameIdsAvailable = [];
+	const users = Object.keys(leaderboardPath);
+	message.channel.send({
+		content: `Fim de jogo.\n\nPlacar da partida\n${users
+			.map((user) => `${currentLeaderboard[user].name}: ${currentLeaderboard[user].score}`)
+			.join("\n")}`,
+		flags: MessageFlags.SuppressNotifications,
+	});
 }
 
 function resetGamesAvailable() {
@@ -96,7 +109,8 @@ async function couldNotGuess(message: Message, window: BrowserWindow) {
 		data.files = [attachment];
 	}
 	message.channel.send(data);
-	await pickNextGuess(message, window);
+	// Little time between the end of one and start of the other
+	setTimeout(() => pickNextGuess(message, window), 2000);
 }
 
 async function sendHint(message: Message) {
@@ -209,19 +223,29 @@ async function guessMade(message: Message, window: BrowserWindow) {
 	const messageContent = message.content.toLowerCase();
 	const userId = message.author.id.toString();
 	const game = mode === Modes.SONG ? games[pickedSong[0]] : games[pickedImage[0]];
-	const gameName = game.name
-		.toLowerCase()
-		.replace(/[^a-zA-Z ]/g, "")
-		.trim();
-	const franchiseName = game.franchise
-		.toLowerCase()
-		.replace(/[^a-zA-Z ]/g, "")
-		.trim();
 	const formattedMessage = messageContent
 		.toLowerCase()
-		.replace(/[^a-zA-Z ]/g, "")
+		.replace(/[^a-zA-Z 0-9]/g, "")
 		.trim();
-	if (formattedMessage !== gameName) {
+	const gameName = game.name
+		.toLowerCase()
+		.replace(/[^a-zA-Z 0-9]/g, "")
+		.trim();
+	const isCorrectGuess =
+		formattedMessage === gameName ||
+		game.aliases.some(
+			(alias) =>
+				formattedMessage ===
+				alias
+					.toLowerCase()
+					.replace(/[^a-zA-Z 0-9]/g, "")
+					.trim()
+		);
+	if (!isCorrectGuess) {
+		const franchiseName = game.franchise
+			.toLowerCase()
+			.replace(/[^a-zA-Z 0-9]/g, "")
+			.trim();
 		if (formattedMessage !== franchiseName) {
 			// TODO: If it is very close maybe send a message
 			return true;
@@ -236,10 +260,16 @@ async function guessMade(message: Message, window: BrowserWindow) {
 	}
 	// Correct guess
 	if (!currentLeaderboard[userId]) {
-		currentLeaderboard[userId] = 0;
+		currentLeaderboard[userId] = {
+			name: message.author.username,
+			score: 0,
+		};
 	}
 	if (!globalLeaderboard[userId]) {
-		globalLeaderboard[userId] = 0;
+		globalLeaderboard[userId] = {
+			name: message.author.username,
+			score: 0,
+		};
 	}
 	let content = `${message.author.username} acertou! O jogo era **${game.name}**`;
 	if (mode === Modes.SONG) {
@@ -258,10 +288,11 @@ async function guessMade(message: Message, window: BrowserWindow) {
 		data.files = [attachment];
 	}
 	message.channel.send(data);
-	currentLeaderboard[userId]++;
-	globalLeaderboard[userId]++;
+	currentLeaderboard[userId].score++;
+	globalLeaderboard[userId].score++;
 	// Next guess
-	await pickNextGuess(message, window);
+	// Little time between the end of one and start of the other
+	setTimeout(() => pickNextGuess(message, window), 2000);
 	fs.writeFileSync(leaderboardPath, JSON.stringify(globalLeaderboard));
 }
 
@@ -271,15 +302,16 @@ export default async function handleGuessGame(
 	event: Electron.IpcMainEvent,
 	window: BrowserWindow
 ): Promise<boolean> {
+	console.log(message);
 	if (!message) return false;
 	const userId = message.author.id.toString();
 	if (!userId) return false;
 	const messageContent = message.content.toLowerCase();
-	// Guess game can only be played in the main channel
+	// Guess game can only be made in the main channel
 	if (message.channel.id !== mainChannelId) return false;
 	const stopGuessGame = messageContent.startsWith("parar guess game") || messageContent.startsWith("stop guess game");
 	if (stopGuessGame && isGameActive) {
-		stopGame();
+		stopGame(message);
 		return true;
 	}
 
@@ -292,7 +324,16 @@ export default async function handleGuessGame(
 	const startGuessGame =
 		messageContent.startsWith("começar guess game") || messageContent.startsWith("start guess game");
 	if (startGuessGame && !isGameActive) {
-		event.reply("DISCORD_FORCE_JOIN", message.member.voice.channel.id);
+		if (mode === Modes.SONG) {
+			if (!message.member.voice.channel) {
+				message.channel.send({
+					content: "You need to join a voice channel for this game.",
+					flags: MessageFlags.SuppressNotifications,
+				});
+				return;
+			}
+			event.reply("DISCORD_FORCE_JOIN", message.member.voice.channel.id);
+		}
 		await startGame(message, window);
 		return true;
 	}
