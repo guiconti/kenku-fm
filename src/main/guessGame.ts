@@ -34,7 +34,7 @@ export default async function handleGuessGame(
 	const messageContent = message.content.toLowerCase();
 
 	// Guess game can only be played in the main channel
-	if (message.channel.id !== mainChannelId) return;
+	if (message.channel.id !== mainChannelId) return false;
 
 	const stopGuessGame = messageContent.startsWith("parar guess game") || messageContent.startsWith("stop guess game");
 	if (stopGuessGame && isGameActive) {

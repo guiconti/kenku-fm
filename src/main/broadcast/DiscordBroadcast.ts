@@ -146,9 +146,9 @@ export class DiscordBroadcast {
 			this.client.on(Events.MessageCreate, async (message) => {
 				if (!message || !this.client) return;
 				// Handle guess game should come first to override other commands when the game is active
-				let handled = handleGuessGame(message, this.client, event, this.window);
+				let handled = await handleGuessGame(message, this.client, event, this.window);
 				if (handled) return;
-				handled = handleBetMessages(message, this.client);
+				handled = await handleBetMessages(message, this.client);
 				if (handled) return;
 				const userId = message.author.id.toString();
 				const messageContent = message.content.toLowerCase();
