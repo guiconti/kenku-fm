@@ -78,11 +78,13 @@ export function Tabs() {
         url = prependHttp(args[0]);
       }
       const bounds = getBounds();
+      console.log(tabs);
       const openedTabs = tabs.tabs.allIds.map((id) => tabs.tabs.byId[id]);
       let id = openedTabs.length > 0 ? openedTabs[0].id : -1;
       if (id !== -1) {
         dispatch(editTab({ id, url }));
         window.kenku.loadURL(id, url);
+        console.log(tabs);
         return;
       }
       id = await window.kenku.createBrowserView(
@@ -103,6 +105,7 @@ export function Tabs() {
         })
       );
       dispatch(selectTab(id));
+      console.log(tabs);
     });
     window.kenku.on("BROWSER_VIEW_NEW_TAB", async () => {
       const bounds = getBounds();

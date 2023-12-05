@@ -76,7 +76,7 @@ function stopGame(message: Message) {
 	isGameActive = false;
 	pickedSong = undefined;
 	gameIdsAvailable = [];
-	const users = Object.keys(leaderboardPath);
+	const users = Object.keys(currentLeaderboard);
 	message.channel.send({
 		content: `Fim de jogo.\n\nPlacar da partida\n${users
 			.map((user) => `${currentLeaderboard[user].name}: ${currentLeaderboard[user].score}`)
@@ -302,7 +302,6 @@ export default async function handleGuessGame(
 	event: Electron.IpcMainEvent,
 	window: BrowserWindow
 ): Promise<boolean> {
-	console.log(message);
 	if (!message) return false;
 	const userId = message.author.id.toString();
 	if (!userId) return false;

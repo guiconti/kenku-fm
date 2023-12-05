@@ -22,7 +22,10 @@ export function useSoundboardPlayback(onError: (message: string) => void) {
       console.log("Play");
       console.log(sound);
       const playback = new Sound({
-        src: sound.url,
+        // src: sound.url,
+        // src: "https://file-examples.com/storage/feaade38c1651bd01984236/2017/11/file_example_WAV_1MG.wav",
+        // src: "../../../assets/audios/aee.wav",
+        src: "/src/assets/audios/aee.wav",
         volume: sound.volume,
         fadeIn: sound.fadeIn,
         fadeOut: sound.fadeOut,

@@ -1,16 +1,54 @@
 {
-  "env": {
-    "browser": true,
-    "es6": true,
-    "node": true
-  },
-  "extends": [
-    "eslint:recommended",
-    "plugin:@typescript-eslint/eslint-recommended",
-    "plugin:@typescript-eslint/recommended",
-    "plugin:import/recommended",
-    "plugin:import/electron",
-    "plugin:import/typescript"
-  ],
-  "parser": "@typescript-eslint/parser"
+	"env": {
+		"browser": true,
+		"es6": true,
+		"node": true
+	},
+	"extends": [
+		"eslint:recommended",
+		"plugin:@typescript-eslint/eslint-recommended",
+		"plugin:@typescript-eslint/recommended",
+		"plugin:import/recommended",
+		"plugin:import/electron",
+		"plugin:import/typescript"
+	],
+	"parser": "@typescript-eslint/parser",
+	"rules": {
+		"curly": ["error", "all"],
+		"import/no-extraneous-dependencies": "off",
+		"no-param-reassign": [
+			"error",
+			{
+				"props": false
+			}
+		],
+		"no-underscore-dangle": "off",
+		"node/no-unpublished-require": "off",
+		"promise/no-callback-in-promise": "off",
+		"no-plusplus": "off",
+    "import/no-anonymous-default-export": "off",
+		"prettier/prettier": [
+			"error",
+			{
+				"endOfLine": "auto"
+			}
+		],
+		"@typescript-eslint/no-unused-vars": [
+			"off",
+			{
+				"argsIgnorePattern": "_next"
+			}
+		]
+	},
+	"settings": {
+		"import/resolver": {
+			"node": {
+				"extensions": [".js", ".jsx", ".ts", ".tsx"]
+			},
+			"typescript": {
+				// always try to resolve types under `<root>@types` directory even it doesn't contain any source code, like `@types/unist`
+				"alwaysTryTypes": true
+			}
+		}
+	}
 }
