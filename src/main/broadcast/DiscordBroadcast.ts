@@ -18,6 +18,7 @@ import { ChannelType, Client, Events, GatewayIntentBits, Message, MessageFlags, 
 import { createAudioPlayer, getVoiceConnection, joinVoiceChannel, NoSubscriberBehavior } from "@discordjs/voice";
 import handleBetMessages from "../bet";
 import handleGuessGame from "../guessGame";
+import handleMiningMessages from "../mining";
 
 type VoiceChannel = {
 	id: string;
@@ -192,6 +193,8 @@ export class DiscordBroadcast {
 				let handled = await handleGuessGame(message, this.client, event, this.window);
 				if (handled) return;
 				handled = await handleBetMessages(message, this.client);
+				if (handled) return;
+				handled = await handleMiningMessages(message, this.client);
 				if (handled) return;
 				const userId = message.author.id.toString();
 				const messageContent = message.content.toLowerCase();
