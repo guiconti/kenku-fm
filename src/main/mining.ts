@@ -26,4 +26,5 @@ export default async function handleMiningMessages(message: Message, client: Cli
 	const result = Math.random() * 100;
 	const answer = getAnswerForValue(result);
 	message.channel.send({ content: answer, flags: MessageFlags.SuppressNotifications });
+	return true;
 }
