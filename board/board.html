@@ -1,0 +1,256 @@
+<html>
+	<head>
+		<link rel="stylesheet" href="board.css" />
+	</head>
+	<body>
+		<button id="button">Save</button>
+		<button id="load">Load</button>
+		<div id="colors"></div>
+		<div id="graph" class="board" />
+	</body>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+	<script src="./dist/boardGenerator.js"></script>
+	<script>
+		const properties = {
+			// Shop
+			minShop: 2,
+			maxShop: 4,
+			// Two Truths One Lie
+			minTwoTruthsOneLie: 8,
+			maxTwoTruthsOneLie: 12,
+			// Mine
+			minMines: 4,
+			maxMines: 6,
+			// Monster battle
+			minMonsterBattles: 10,
+			maxMonsterBattles: 14,
+			// Player battle
+			minPlayerBattles: 5,
+			maxPlayerBattles: 10,
+			// Negative effect
+			minNegativeEffects: 5,
+			maxNegativeEffects: 10,
+			// Random effect
+			minRandomEffects: 3,
+			maxRandomEffects: 5,
+			// Positive effect
+			minPositiveEffects: 4,
+			maxPositiveEffects: 6,
+			// Branches
+			minBranches: 2,
+			maxBranches: 3,
+			minBranchSize: 4,
+			maxBranchSize: 8,
+		};
+		const START_COLOR = "#666";
+		const STAR_COLOR = "#D5B942";
+		const SHOP_COLOR = "#1EA896";
+		const TWO_TRUTHS_ONE_LIE_COLOR = "#F2CEE6";
+		const MINE_COLOR = "#523F38";
+		const MONSTER_COLOR = "#60E1E0";
+		const VS_COLOR = "#7A89C2";
+		const NEGATIVE_COLOR = "#A22616";
+		const RANDOM_COLOR = "#F4A259";
+		const POSITIVE_COLOR = "#8DB580";
+		const colors = [
+			START_COLOR,
+			STAR_COLOR,
+			SHOP_COLOR,
+			TWO_TRUTHS_ONE_LIE_COLOR,
+			MINE_COLOR,
+			MONSTER_COLOR,
+			VS_COLOR,
+			NEGATIVE_COLOR,
+			RANDOM_COLOR,
+			POSITIVE_COLOR,
+		];
+		const COLOR_TO_NAME = {
+			[START_COLOR]: "Start",
+			[STAR_COLOR]: "Star",
+			[SHOP_COLOR]: "Shop",
+			[TWO_TRUTHS_ONE_LIE_COLOR]: "Two Truths One Lie",
+			[MINE_COLOR]: "Mine",
+			[MONSTER_COLOR]: "Monster",
+			[VS_COLOR]: "VS",
+			[NEGATIVE_COLOR]: "Negative",
+			[RANDOM_COLOR]: "Random",
+			[POSITIVE_COLOR]: "Positive",
+		};
+		// Const add label to colours
+		const colorsDiv = document.getElementById("colors");
+		colors.forEach((color) => {
+			const colorDiv = document.createElement("div");
+			const colorDot = document.createElement("span");
+			colorDot.style.width = "12px";
+			colorDot.style.height = "12px";
+			colorDot.style.backgroundColor = color;
+			colorDot.style.display = "inline-block";
+			colorDot.style.borderRadius = "999px";
+			colorDiv.appendChild(colorDot);
+			colorDiv.append(COLOR_TO_NAME[color]);
+			colorsDiv.appendChild(colorDiv);
+		});
+
+		const TYPE_TO_CLASS = {
+			0: "start",
+			1: "star",
+			2: "shop",
+			3: "twoTruthsOneLie",
+			4: "mine",
+			5: "monster",
+			6: "vs",
+			7: "negative",
+			8: "random",
+			9: "positive",
+		};
+		const board = new Board(properties);
+		const elements = [];
+		const visited = new Set();
+		const queue = [board.start];
+		while (queue.length > 0) {
+			const node = queue.shift();
+			if (visited.has(node)) {
+				continue;
+			}
+			visited.add(node);
+			console.log([TYPE_TO_CLASS[node.type]]);
+			elements.push({
+				data: { id: node.id },
+				classes: [TYPE_TO_CLASS[node.type]],
+			});
+			for (const next of node.next) {
+				elements.push({
+					data: {
+						id: `${node.id}-${next.id}`,
+						source: node.id,
+						target: next.id,
+						arrow: "triangle",
+					},
+				});
+				queue.push(next);
+			}
+		}
+		const graph = cytoscape({
+			container: document.getElementById("graph"),
+			elements,
+			style: [
+				{
+					selector: "node",
+					style: {
+						label: "data(id)",
+					},
+				},
+				{
+					selector: ".start",
+					style: {
+						"background-color": START_COLOR,
+					},
+				},
+				{
+					selector: ".star",
+					style: {
+						"background-color": STAR_COLOR,
+					},
+				},
+				{
+					selector: ".shop",
+					style: {
+						"background-color": SHOP_COLOR,
+					},
+				},
+				{
+					selector: ".twoTruthsOneLie",
+					style: {
+						"background-color": TWO_TRUTHS_ONE_LIE_COLOR,
+					},
+				},
+				{
+					selector: ".mine",
+					style: {
+						"background-color": MINE_COLOR,
+					},
+				},
+				{
+					selector: ".monster",
+					style: {
+						"background-color": MONSTER_COLOR,
+					},
+				},
+				{
+					selector: ".vs",
+					style: {
+						"background-color": VS_COLOR,
+					},
+				},
+				{
+					selector: ".negative",
+					style: {
+						"background-color": NEGATIVE_COLOR,
+					},
+				},
+				{
+					selector: ".random",
+					style: {
+						"background-color": RANDOM_COLOR,
+					},
+				},
+				{
+					selector: ".positive",
+					style: {
+						"background-color": POSITIVE_COLOR,
+					},
+				},
+				{
+					selector: "edge",
+					style: {
+						width: 3,
+						// "line-color": "#ccc",
+						// "target-arrow-color": "#ccc",
+						"target-arrow-shape": "triangle",
+						"curve-style": "bezier",
+					},
+				},
+			],
+			layout: {
+				name: "cose",
+			},
+		});
+		const button = document.getElementById("button");
+		button.addEventListener("click", () => {
+			const graphJson = graph.json(true);
+			const file = new File([JSON.stringify(graphJson)], "graph.json");
+			// Create a link and set the URL using `createObjectURL`
+			const link = document.createElement("a");
+			link.style.display = "none";
+			link.href = URL.createObjectURL(file);
+			link.download = file.name;
+
+			// It needs to be added to the DOM so it can be clicked
+			document.body.appendChild(link);
+			link.click();
+
+			// To make this work on Firefox we need to wait
+			// a little while before removing it.
+			setTimeout(() => {
+				URL.revokeObjectURL(link.href);
+				link.parentNode.removeChild(link);
+			}, 0);
+		});
+		const loadButton = document.getElementById("load");
+		loadButton.addEventListener("click", () => {
+			const fileInput = document.createElement("input");
+			fileInput.type = "file";
+			fileInput.accept = ".json";
+			fileInput.addEventListener("change", (event) => {
+				const file = event.target.files[0];
+				const reader = new FileReader();
+				reader.onload = (event) => {
+					const graphJson = JSON.parse(event.target.result);
+					graph.json(graphJson);
+				};
+				reader.readAsText(file);
+			});
+			fileInput.click();
+		});
+	</script>
+</html>
