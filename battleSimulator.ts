@@ -32,7 +32,7 @@ const goblin = {
 const kobold = {
   name: 'Kobold',
   life: 4,
-  damage: 1,
+  damage: 2,
 }
 const assassin = {
   name: 'Assassin',
