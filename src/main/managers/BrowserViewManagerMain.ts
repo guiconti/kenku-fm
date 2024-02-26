@@ -70,9 +70,9 @@ export class BrowserViewManagerMain {
 			this.window.emit("MEDIA_STOPPED_PLAYING");
 			event.reply("BROWSER_VIEW_MEDIA_PAUSED", id);
 		});
-		this.views[id].webContents.on("new-window", (event, url) => {
-			event.preventDefault();
+		this.views[id].webContents.setWindowOpenHandler(({ url }) => {
 			shell.openExternal(url);
+			return { action: "deny" };
 		});
 		let loaded = false;
 		this.views[id].webContents.on("did-finish-load", () => {
