@@ -1,11 +1,15 @@
 import { BrowserWindow, ipcMain } from "electron";
-import { ChannelType, Client, Events, GatewayIntentBits } from "discord.js";
+import { ChannelType, Client, Events, GatewayIntentBits, Message, MessageFlags, Partials } from "discord.js";
 import {
   createAudioPlayer,
   getVoiceConnection,
   joinVoiceChannel,
   NoSubscriberBehavior,
 } from "@discordjs/voice";
+import handleBetMessages from "../bet";
+import handleGuessGame from "../guessGame";
+import handleMiningMessages from "../mining";
+import handleRollMessage from "../roll";
 
 type VoiceChannel = {
   id: string;
@@ -19,6 +23,15 @@ type Guild = {
   voiceChannels: VoiceChannel[];
 };
 
+enum MessageType {
+	NOT_DEFINED = -1,
+	JOIN = 0,
+	PLAY = 1,
+	PLAY_NOW = 2,
+	SKIP = 3,
+	QUEUE = 4,
+}
+
 export class DiscordBroadcast {
   window: BrowserWindow;
   client?: Client;
@@ -29,13 +42,23 @@ export class DiscordBroadcast {
       maxMissedFrames: 3000,
     },
   });
+  currentlyPlaying: boolean;
+	queue: Array<string> = [];
   constructor(window: BrowserWindow) {
     this.window = window;
     ipcMain.on("DISCORD_CONNECT", this._handleConnect);
     ipcMain.on("DISCORD_DISCONNECT", this._handleDisconnect);
     ipcMain.on("DISCORD_JOIN_CHANNEL", this._handleJoinChannel);
     ipcMain.on("DISCORD_LEAVE_CHANNEL", this._handleLeaveChannel);
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+		// @ts-ignore
+		this.window.on("MEDIA_STARTED_PLAYING", this.onBrowserViewStartPlaying.bind(this));
+		// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+		// @ts-ignore
+		this.window.on("MEDIA_STOPPED_PLAYING", this.nextSong.bind(this));
     this.audioPlayer.on("error", this._handleBroadcastError);
+    this.currentlyPlaying = false;
+		this.queue = [];
   }
 
   destroy() {
@@ -47,6 +70,52 @@ export class DiscordBroadcast {
     this.client?.destroy();
     this.client = undefined;
   }
+
+  getMessageType(message: string): MessageType {
+		if (message.includes("kassino") || message.includes("kassinao")) {
+			return MessageType.JOIN;
+		}
+		if (
+			message.match(
+				/^play now ((?:https?:)?\/\/)?((?:www|m)\.)?((?:youtube\.com|youtu.be))(\/(?:[\w\-]+\?v=|embed\/|v\/)?)([\w\-]+)(\S+)?/gim
+			) ||
+			message.match(
+				/^play now (https?:\/\/open.spotify.com\/(track|user|artist|album)\/[a-zA-Z0-9]+(\/playlist\/[a-zA-Z0-9]+|)|spotify:(track|user|artist|album):[a-zA-Z0-9]+(:playlist:[a-zA-Z0-9]+|))/gim
+			)
+		) {
+			return MessageType.PLAY_NOW;
+		}
+		if (
+			message.match(
+				/^play ((?:https?:)?\/\/)?((?:www|m)\.)?((?:youtube\.com|youtu.be))(\/(?:[\w\-]+\?v=|embed\/|v\/)?)([\w\-]+)(\S+)?/gim
+			) ||
+			message.match(
+				/^play (https?:\/\/open.spotify.com\/(track|user|artist|album)\/[a-zA-Z0-9]+(\/playlist\/[a-zA-Z0-9]+|)|spotify:(track|user|artist|album):[a-zA-Z0-9]+(:playlist:[a-zA-Z0-9]+|))/gim
+			)
+		) {
+			return MessageType.PLAY;
+		}
+		if (message.startsWith("skip") || message.startsWith("next")) {
+			return MessageType.SKIP;
+		}
+		if (message.startsWith("queue")) {
+			return MessageType.QUEUE;
+		}
+		return MessageType.NOT_DEFINED;
+	}
+
+	onBrowserViewStartPlaying() {
+		this.currentlyPlaying = true;
+	}
+
+	nextSong() {
+		if (this.queue.length === 0) {
+			this.currentlyPlaying = false;
+			return;
+		}
+		const nextUrl = this.queue.shift();
+		this.window.webContents.send("BROWSER_STREAM", nextUrl);
+	}
 
   _handleConnect = async (event: Electron.IpcMainEvent, token: string) => {
     if (!token) {
@@ -61,7 +130,8 @@ export class DiscordBroadcast {
 
     try {
       this.client = new Client({
-        intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
+        intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildMessages, GatewayIntentBits.DirectMessages, GatewayIntentBits.MessageContent],
+        partials: [Partials.Channel, Partials.Message],
       });
       this.client.once(Events.ClientReady, async () => {
         event.reply("DISCORD_READY");
@@ -90,6 +160,73 @@ export class DiscordBroadcast {
         );
         event.reply("DISCORD_GUILDS", guilds);
       });
+      this.client.on(Events.MessageCreate, async (message) => {
+				if (!message || !this.client) return;
+				// Handle guess game should come first to override other commands when the game is active
+				let handled = await handleGuessGame(message, this.client, event, this.window);
+				if (handled) return;
+				handled = await handleBetMessages(message, this.client);
+				if (handled) return;
+				handled = await handleMiningMessages(message, this.client);
+				if (handled) return;
+				handled = await handleRollMessage(message, this.client);
+				if (handled) return;
+				const userId = message.author.id.toString();
+				const messageContent = message.content.toLowerCase();
+				const messageType = this.getMessageType(messageContent);
+				switch (messageType) {
+					case MessageType.JOIN: {
+						event.reply("DISCORD_FORCE_JOIN", message.member.voice.channel.id);
+						this.playIntro();
+						break;
+					}
+					case MessageType.PLAY:
+					case MessageType.PLAY_NOW: {
+						let url = undefined;
+						let matches = message.content.match(
+							/((?:https?:)?\/\/)?((?:www|m)\.)?((?:youtube\.com|youtu.be))(\/(?:[\w\-]+\?v=|embed\/|v\/)?)([\w\-]+)(\S+)?/gim
+						);
+						// TODO: Iterate through list of regex instead lol
+						if (matches && matches.length > 0) {
+							url = matches[0];
+						} else {
+							matches = message.content.match(
+								/(https?:\/\/open.spotify.com\/(track|user|artist|album)\/[a-zA-Z0-9]+(\/playlist\/[a-zA-Z0-9]+|)|spotify:(track|user|artist|album):[a-zA-Z0-9]+(:playlist:[a-zA-Z0-9]+|))/gim
+							);
+							if (matches && matches.length > 0) {
+								url = matches[0];
+							}
+						}
+						if (!url) break;
+						event.reply("DISCORD_FORCE_JOIN", message.member.voice.channel.id);
+						if (this.currentlyPlaying && messageType !== MessageType.PLAY_NOW) {
+							this.queue.push(url);
+							message.channel.send({
+								content: `Adicionei na fila, posição ${this.queue.length}.`,
+								flags: MessageFlags.SuppressNotifications,
+							});
+							return;
+						}
+						this.window.webContents.send("BROWSER_STREAM", url);
+						break;
+					}
+					case MessageType.SKIP: {
+						if (this.queue.length === 0) return;
+						this.nextSong();
+						break;
+					}
+					case MessageType.QUEUE: {
+						const text = "Fila atual: \n" + this.queue.map((url, index) => `${index + 1}: ${url}`).join("\n");
+						message.channel.send({
+							content: text,
+							flags: MessageFlags.SuppressNotifications,
+						});
+						break;
+					}
+					default:
+						break;
+				}
+			});
       this.client.on("error", (err) => {
         event.reply("DISCORD_DISCONNECTED");
         event.reply("ERROR", `Error connecting to bot: ${err.message}`);
@@ -100,6 +237,13 @@ export class DiscordBroadcast {
       event.reply("ERROR", `Error connecting to bot: ${err.message}`);
     }
   };
+
+  playIntro(): void {
+		const windows = BrowserWindow.getAllWindows();
+		for (const window of windows) {
+			window.webContents.send("BROWSER_STREAM", "https://www.youtube.com/watch?v=K0RAuw68yqM");
+		}
+	}
 
   _handleDisconnect = async (event: Electron.IpcMainEvent) => {
     event.reply("DISCORD_DISCONNECTED");
