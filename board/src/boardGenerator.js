@@ -38,7 +38,7 @@ function getRandomInteger(min, max) {
 var Board = /** @class */ (function () {
     function Board(properties) {
         var shopAmount = getRandomInteger(properties.minShop, properties.maxShop);
-        var twoTruthsOneLieAmount = getRandomInteger(properties.minTwoTruthsOneLie, properties.maxTwoTruthsOneLie);
+        // const twoTruthsOneLieAmount = getRandomInteger(properties.minTwoTruthsOneLie, properties.maxTwoTruthsOneLie);
         var minesAmount = getRandomInteger(properties.minMines, properties.maxMines);
         var monsterBattlesAmount = getRandomInteger(properties.minMonsterBattles, properties.maxMonsterBattles);
         var playerBattlesAmount = getRandomInteger(properties.minPlayerBattles, properties.maxPlayerBattles);
@@ -48,7 +48,7 @@ var Board = /** @class */ (function () {
         var branchesAmount = getRandomInteger(properties.minBranches, properties.maxBranches);
         this.size =
             shopAmount +
-                twoTruthsOneLieAmount +
+                // twoTruthsOneLieAmount +
                 minesAmount +
                 monsterBattlesAmount +
                 playerBattlesAmount +
@@ -64,7 +64,7 @@ var Board = /** @class */ (function () {
         var nodesAdded = new Set();
         var branchesLeft = branchesAmount;
         nodesAvailable = nodesAvailable.concat(Array(shopAmount).fill(NodeType.SHOP));
-        nodesAvailable = nodesAvailable.concat(Array(twoTruthsOneLieAmount).fill(NodeType.TWO_TRUTHS_ONE_LIE));
+        // nodesAvailable = nodesAvailable.concat(Array(twoTruthsOneLieAmount).fill(NodeType.TWO_TRUTHS_ONE_LIE));
         nodesAvailable = nodesAvailable.concat(Array(minesAmount).fill(NodeType.MINE));
         nodesAvailable = nodesAvailable.concat(Array(monsterBattlesAmount).fill(NodeType.MONSTER_BATTLE));
         nodesAvailable = nodesAvailable.concat(Array(playerBattlesAmount).fill(NodeType.PLAYER_BATTLE));

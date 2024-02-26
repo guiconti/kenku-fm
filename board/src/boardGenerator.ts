@@ -72,7 +72,7 @@ class Board {
 
 	constructor(properties: BoardProperties) {
 		const shopAmount = getRandomInteger(properties.minShop, properties.maxShop);
-		const twoTruthsOneLieAmount = getRandomInteger(properties.minTwoTruthsOneLie, properties.maxTwoTruthsOneLie);
+		// const twoTruthsOneLieAmount = getRandomInteger(properties.minTwoTruthsOneLie, properties.maxTwoTruthsOneLie);
 		const minesAmount = getRandomInteger(properties.minMines, properties.maxMines);
 		const monsterBattlesAmount = getRandomInteger(properties.minMonsterBattles, properties.maxMonsterBattles);
 		const playerBattlesAmount = getRandomInteger(properties.minPlayerBattles, properties.maxPlayerBattles);
@@ -82,7 +82,7 @@ class Board {
 		const branchesAmount = getRandomInteger(properties.minBranches, properties.maxBranches);
 		this.size =
 			shopAmount +
-			twoTruthsOneLieAmount +
+			// twoTruthsOneLieAmount +
 			minesAmount +
 			monsterBattlesAmount +
 			playerBattlesAmount +
@@ -98,7 +98,7 @@ class Board {
 		let nodesAdded: Set<BoardNode> = new Set<BoardNode>();
 		let branchesLeft = branchesAmount;
 		nodesAvailable = nodesAvailable.concat(Array(shopAmount).fill(NodeType.SHOP));
-		nodesAvailable = nodesAvailable.concat(Array(twoTruthsOneLieAmount).fill(NodeType.TWO_TRUTHS_ONE_LIE));
+		// nodesAvailable = nodesAvailable.concat(Array(twoTruthsOneLieAmount).fill(NodeType.TWO_TRUTHS_ONE_LIE));
 		nodesAvailable = nodesAvailable.concat(Array(minesAmount).fill(NodeType.MINE));
 		nodesAvailable = nodesAvailable.concat(Array(monsterBattlesAmount).fill(NodeType.MONSTER_BATTLE));
 		nodesAvailable = nodesAvailable.concat(Array(playerBattlesAmount).fill(NodeType.PLAYER_BATTLE));
