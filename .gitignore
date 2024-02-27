@@ -94,4 +94,6 @@ dist/
 
 native_modules/
 
+fetcher
+recordings/
 severus/
