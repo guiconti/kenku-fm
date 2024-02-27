@@ -55,6 +55,23 @@ export function Home({ onPlayTrack, onPlaySound }: HomeProps) {
   const [playlistAddOpen, setPlaylistAddOpen] = useState(false);
   const [soundboardAddOpen, setSoundboardAddOpen] = useState(false);
 
+  const [a, setA] = React.useState("See all");
+  
+  React.useEffect(() => {
+    console.log("Aee");
+    window.player.on("PLAY_AUDIO", () => {
+      setA("Mamaa");
+      console.log("Play soundboard audio");
+    });
+    // window.kenku.on("PLAY_SOUNDBOARD_AUDIO", () => {
+    //   console.log("Play soundboard audio kenku");
+    // });
+    return () => {
+      window.player.removeAllListeners("PLAY_AUDIO");
+      // window.kenku.removeAllListeners("PLAY_SOUNDBOARD_AUDIO");
+    }
+  }, []);
+
   return (
     <Container
       maxWidth="md"
@@ -84,7 +101,7 @@ export function Home({ onPlayTrack, onPlaySound }: HomeProps) {
             </Tooltip>
             <Box sx={{ flexGrow: 1 }} />
             <Link color="inherit" underline="hover" component={PlaylistsLink}>
-              See All
+              {a}
             </Link>
           </Stack>
         </CardContent>

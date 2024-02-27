@@ -1,5 +1,6 @@
 import { BrowserWindow, ipcMain } from "electron";
 import { ChannelType, Client, Events, GatewayIntentBits, Message, MessageFlags, Partials } from "discord.js";
+import path from "path";
 import {
   createAudioPlayer,
   getVoiceConnection,
@@ -7,6 +8,11 @@ import {
   NoSubscriberBehavior,
   entersState,
   VoiceConnectionStatus,
+  createAudioResource,
+  VoiceConnection,
+  AudioPlayerStatus,
+  AudioPlayerState,
+  PlayerSubscription,
 } from "@discordjs/voice";
 import { createListeningStream } from "../createWriteStream";
 import handleBetMessages from "../bet";
@@ -35,9 +41,13 @@ enum MessageType {
   QUEUE = 4,
 }
 
+const AUDIOS_PATH = path.join(process.cwd(), '/src/assets/audios/');
+const RECORDING_AVAILABLE = false;
+
 export class DiscordBroadcast {
   window: BrowserWindow;
   client?: Client;
+  voiceConnection?: VoiceConnection;
   audioPlayer = createAudioPlayer({
     behaviors: {
       noSubscriber: NoSubscriberBehavior.Play,
@@ -45,6 +55,15 @@ export class DiscordBroadcast {
       maxMissedFrames: 3000,
     },
   });
+  audioPlayerSubscription?: PlayerSubscription;
+  fileAudioPlayer = createAudioPlayer({
+    behaviors: {
+      noSubscriber: NoSubscriberBehavior.Play,
+      // Set max missed frames to 60 seconds (20ms per frame)
+      maxMissedFrames: 3000,
+    }
+  });
+  fileAudioPlayerSubscription?: PlayerSubscription;
   currentlyPlaying: boolean;
   queue: Array<string> = [];
   constructor(window: BrowserWindow) {
@@ -247,11 +266,53 @@ export class DiscordBroadcast {
     }
   };
 
-  playIntro(): void {
-    const windows = BrowserWindow.getAllWindows();
-    for (const window of windows) {
-      window.webContents.send("BROWSER_STREAM", "https://www.youtube.com/watch?v=K0RAuw68yqM");
+  onFileAudioPlayerStatusChange(oldState: AudioPlayerState, newState: AudioPlayerState) {
+    if (newState.status === AudioPlayerStatus.Paused || newState.status === AudioPlayerStatus.AutoPaused || newState.status === AudioPlayerStatus.Idle) {
+      this.fileAudioPlayer.removeAllListeners('stateChange');
+      this.switchFileAudioPlayerToAudioPlayer();
     }
+  }
+
+  switchFileAudioPlayerToAudioPlayer() {
+    console.log('Switch to audio player');
+    if (!this.voiceConnection || !this.audioPlayer) return;
+    this.fileAudioPlayerSubscription?.unsubscribe();
+    this.audioPlayerSubscription?.unsubscribe();
+    this.audioPlayerSubscription = this.voiceConnection.subscribe(this.audioPlayer);
+  }
+
+  switchAudioPlayerToFileAudioPlayer() {
+    console.log('Switch to file audio player');
+    if (!this.voiceConnection || !this.fileAudioPlayer) return;
+    this.fileAudioPlayerSubscription?.unsubscribe();
+    this.audioPlayerSubscription?.unsubscribe();
+    this.fileAudioPlayerSubscription = this.voiceConnection.subscribe(this.fileAudioPlayer);
+  }
+
+  playIntroWaited() {
+    this.playIntro(true);
+  }
+
+  playFileAudio(audioPath: string) {
+    console.log('Playing', audioPath);
+    this.switchAudioPlayerToFileAudioPlayer();
+    const audioResource = createAudioResource(audioPath, { inlineVolume: true });
+    audioResource.volume?.setVolume(1);
+    try {
+      this.fileAudioPlayer.play(audioResource);
+      this.fileAudioPlayer.on('stateChange', this.onFileAudioPlayerStatusChange.bind(this));
+    } catch (err) {
+      console.log(err);
+    }
+  }
+
+  playIntro(fromWait?: boolean): void {
+    if (!fromWait) {
+      setTimeout(this.playIntroWaited.bind(this), 300);
+      return;
+    }
+    const introAudioPath = path.join(AUDIOS_PATH, 'intro.mp3');
+    this.playFileAudio(introAudioPath);
   }
 
   _handleDisconnect = async (event: Electron.IpcMainEvent) => {
@@ -267,16 +328,18 @@ export class DiscordBroadcast {
       const channel = await this.client.channels.fetch(channelId);
       if (channel && channel.isVoiceBased() && channel.joinable) {
         try {
-          const connection = joinVoiceChannel({
+          this.voiceConnection = joinVoiceChannel({
             channelId: channel.id,
             guildId: channel.guild.id,
             adapterCreator: channel.guild.voiceAdapterCreator,
           });
-          connection.subscribe(this.audioPlayer);
+          this.fileAudioPlayerSubscription = this.voiceConnection.subscribe(this.fileAudioPlayer);
+          this.fileAudioPlayer.on("error", this.switchFileAudioPlayerToAudioPlayer.bind(this));
+          this.audioPlayerSubscription = this.voiceConnection.subscribe(this.audioPlayer);
           event.reply("DISCORD_CHANNEL_JOINED", channelId);
-          connection.on("error", (e) => {
+          this.voiceConnection.on("error", (e) => {
             console.error(e);
-            connection.destroy();
+            this.voiceConnection.destroy();
             event.reply("DISCORD_CHANNEL_LEFT", channelId);
             event.reply("ERROR", `Error connecting to voice channel: ${e.message}`);
           });
@@ -285,10 +348,11 @@ export class DiscordBroadcast {
           event.reply("DISCORD_CHANNEL_LEFT", channelId);
           event.reply("ERROR", `Error connecting to voice channel: ${e.message}`);
         }
-        const connection = getVoiceConnection(channel.guild.id);
-        if (!connection) return;
-        await entersState(connection, VoiceConnectionStatus.Ready, 20e3);
-        const receiver = connection.receiver;
+        if (!RECORDING_AVAILABLE) return;
+        this.voiceConnection = getVoiceConnection(channel.guild.id);
+        if (!this.voiceConnection) return;
+        await entersState(this.voiceConnection, VoiceConnectionStatus.Ready, 20e3);
+        const receiver = this.voiceConnection.receiver;
         const client = this.client;
         receiver.speaking.on("start", (userId: string) => {
           const user = client.users.cache.get(userId);
