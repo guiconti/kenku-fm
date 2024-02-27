@@ -90,9 +90,11 @@ export class BrowserViewManagerMain {
       event.reply("BROWSER_VIEW_FAVICON_UPDATED", id, favicons);
     });
     this.views[id].webContents.on("media-started-playing", () => {
+      this.window.emit("MEDIA_STARTED_PLAYING");
       event.reply("BROWSER_VIEW_MEDIA_STARTED_PLAYING", id);
     });
     this.views[id].webContents.on("media-paused", () => {
+      this.window.emit("MEDIA_STOPPED_PLAYING");
       event.reply("BROWSER_VIEW_MEDIA_PAUSED", id);
     });
     this.views[id].webContents.setWindowOpenHandler(({ url }) => {

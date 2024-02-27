@@ -19,6 +19,7 @@ import {
   decreasePlayingMedia,
   increasePlayingMedia,
 } from "../player/playerSlice";
+import { prependHttp } from "../../../utils";
 
 export function Tabs() {
   const dispatch = useDispatch();
@@ -71,6 +72,39 @@ export function Tabs() {
         dispatch(decreaseTabPlayingMedia(viewId));
       }
     });
+    window.kenku.on("BROWSER_STREAM", async (args) => {
+      let url = "";
+      if (args.length > 0) {
+        url = prependHttp(args[0]);
+      }
+      const bounds = getBounds();
+      const openedTabs = tabs.tabs.allIds.map((id) => tabs.tabs.byId[id]);
+      let id = openedTabs.length > 0 ? openedTabs[0].id : -1;
+      if (id !== -1) {
+        dispatch(editTab({ id, url }));
+        window.kenku.loadURL(id, url);
+        return;
+      }
+      id = await window.kenku.createBrowserView(
+        url,
+        bounds.x,
+        bounds.y,
+        bounds.width,
+        bounds.height
+      );
+      dispatch(
+        addTab({
+          id,
+          url,
+          title: "Streaming",
+          icon: "",
+          playingMedia: 0,
+          muted: false,
+        })
+      );
+      dispatch(selectTab(id));
+      console.log(tabs);
+    });
     window.kenku.on("BROWSER_VIEW_NEW_TAB", async () => {
       const bounds = getBounds();
       const id = await window.kenku.createBrowserView(
@@ -115,6 +149,7 @@ export function Tabs() {
       window.kenku.removeAllListeners("BROWSER_VIEW_MEDIA_STARTED_PLAYING");
       window.kenku.removeAllListeners("BROWSER_VIEW_MEDIA_PAUSED");
       window.kenku.removeAllListeners("BROWSER_VIEW_NEW_TAB");
+      window.kenku.removeAllListeners("BROWSER_STREAM");
       window.kenku.removeAllListeners("BROWSER_VIEW_CLOSE_TAB");
     };
   }, [player.tab.id, tabs]);

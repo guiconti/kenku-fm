@@ -16,5 +16,6 @@ module.exports = {
     "prism-media": "commonjs2 prism-media",
     "libsodium-wrappers": "commonjs2 libsodium-wrappers",
     "discord.js": "commonjs2 discord.js",
+    "node-fetch": "commonjs2 node-fetch",
   },
 };

@@ -59,7 +59,7 @@ const template: any = [
   {
     label: "View",
     submenu: [
-      ...(app.isPackaged ? [] : [{ role: "toggleDevTools" }]),
+      ...(app.isPackaged ? [] : [{ role: "toggleDevTools", accelerator: "Ctrl+Shift+I" }]),
       { role: "togglefullscreen" },
     ],
   },

@@ -8,6 +8,7 @@ import ArrowForwardRounded from "@mui/icons-material/ArrowForwardRounded";
 import RefreshRounded from "@mui/icons-material/RefreshRounded";
 
 import { getDropURL } from "../../common/drop";
+import { prependHttp } from "../../../utils";
 
 type URLBarProps = {
   viewId: number;
@@ -97,12 +98,3 @@ export function URLBar({ viewId, url, onURLChange, disabled }: URLBarProps) {
   );
 }
 
-function prependHttp(url: string, { https = true } = {}) {
-  url = url.trim();
-
-  if (/^\.*\/|^(?!localhost)\w+?:/.test(url)) {
-    return url;
-  }
-
-  return url.replace(/^(?!(?:\w+?:)?\/\/)/, https ? "https://" : "http://");
-}
