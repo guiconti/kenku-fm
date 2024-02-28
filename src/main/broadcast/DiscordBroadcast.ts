@@ -40,6 +40,7 @@ enum MessageType {
   PLAY_NOW = 2,
   SKIP = 3,
   QUEUE = 4,
+  STOP = 5,
 }
 
 const AUDIOS_PATH = path.join(process.cwd(), '/src/assets/audios/');
@@ -120,6 +121,9 @@ export class DiscordBroadcast {
     }
     if (message.startsWith("skip") || message.startsWith("next")) {
       return MessageType.SKIP;
+    }
+    if (message.startsWith("stop")) {
+      return MessageType.STOP;
     }
     if (message.startsWith("queue")) {
       return MessageType.QUEUE;
@@ -252,6 +256,10 @@ export class DiscordBroadcast {
               content: text,
               flags: MessageFlags.SuppressNotifications,
             });
+            break;
+          }
+          case MessageType.STOP: {
+            this.window.webContents.send("BROWSER_STREAM", "https://google.com");
             break;
           }
           default:
