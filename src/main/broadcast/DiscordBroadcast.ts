@@ -19,6 +19,7 @@ import handleBetMessages from "../bet";
 import handleGuessGame from "../guessGame";
 import handleMiningMessages from "../mining";
 import handleRollMessage from "../roll";
+import handleTTSMessage from "../tts";
 
 type VoiceChannel = {
   id: string;
@@ -198,6 +199,8 @@ export class DiscordBroadcast {
         handled = await handleMiningMessages(message, this.client);
         if (handled) return;
         handled = await handleRollMessage(message, this.client);
+        if (handled) return;
+        handled = await handleTTSMessage(message, this.client, this);
         if (handled) return;
         const userId = message.author.id.toString();
         const messageContent = message.content.toLowerCase();
