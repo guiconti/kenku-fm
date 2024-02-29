@@ -195,7 +195,7 @@ export class DiscordBroadcast {
         event.reply("DISCORD_GUILDS", guilds);
       });
       this.client.on(Events.MessageCreate, async (message) => {
-        if (!message || !this.client) return;
+        if (!message || !this.client || message.author.bot) return;
         // Handle guess game should come first to override other commands when the game is active
         let handled = await handleGuessGame(message, this.client, event, this.window);
         if (handled) return;
@@ -207,7 +207,6 @@ export class DiscordBroadcast {
         if (handled) return;
         handled = await handleTTSMessage(message, this.client, this);
         if (handled) return;
-        const userId = message.author.id.toString();
         const messageContent = message.content.toLowerCase();
         const messageType = this.getMessageType(messageContent);
         switch (messageType) {
