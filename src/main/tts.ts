@@ -1,10 +1,16 @@
 import { Client, Message, MessageFlags } from "discord.js";
+import fs from "fs";
 import { v4 as uuid } from "uuid";
 import path from "path";
 import { DiscordBroadcast } from "./broadcast/DiscordBroadcast";
+const { Readable } = require('stream');
+import { finished } from 'stream/promises';
 
 const LOCAL_TTS_PATH = path.join(process.cwd(), '/src/assets/audios/tts');
 const DESKTOP_TTS_PATH = String.raw`Z:\github\kenku-fm\src\assets\audios\tts`;
+
+const LOCAL_INFER_PATH = path.join(process.cwd(), '/src/assets/audios/infers');
+const DESKTOP_INFER_PATH = String.raw`Z:\github\kenku-fm\src\assets\audios\infers`;
 
 // Default values for TTS
 const LOCAL_APPLIO_PREFIX = "http://127.0.0.1:6969";
@@ -88,7 +94,7 @@ const MESSAGE_PREFIX_TO_VOICE = {
 
 const RVC_VOICES = new Set([Voice.LULA, Voice.BOB_ESPONJA, Voice.SILVIO_SANTOS, Voice.GOKU]);
 
-function generateAPIBody(sessionId: string, text: string, ttsAudioPath: string, rvcAudioPath: string, voice?: Voice) {
+function generateTTSBody(sessionId: string, text: string, ttsAudioPath: string, rvcAudioPath: string, voice?: Voice) {
   return {
     data: [
       text,
@@ -117,10 +123,43 @@ function generateAPIBody(sessionId: string, text: string, ttsAudioPath: string, 
   }
 }
 
+function generateInferBody(sessionId: string, inputPath: string, outputPath: string, voice?: Voice) {
+  console.log('Generate infer body', inputPath, outputPath);
+  return {
+    data: [
+      PITCHES[voice ?? Voice.DEFAULT],
+      FILTER_RADIUS,
+      SEARCH_FEATURE_RATIO,
+      VOLUME_ENVELOPE,
+      PROTECT_VOICELESS_CONSONANTS,
+      HOP_LENGTH,
+      PITCH_EXTRACTION_ALGORITHM,
+      inputPath,
+      outputPath,
+      VOICE_MODELS[voice ?? Voice.DEFAULT],
+      VOICE_INDEXES[voice ?? Voice.DEFAULT],
+      SPLIT_AUDIO,
+      AUTOTUNE,
+      CLEAN_AUDIO,
+      CLEAN_STRENGTHS[voice ?? Voice.DEFAULT],
+    ],
+    // @ts-ignore
+    event_data: null,
+    fn_index: 10,
+    trigger_id: 37,
+    session_hash: sessionId
+  }
+}
+
 function sleep(milliseconds: number) {
   return new Promise(resolve => {
     setTimeout(resolve, milliseconds);
   });
+}
+
+const TTS_VERSION = 0;
+function getFilePrefix() {
+  return `v${TTS_VERSION}-${Date.now().toString()}`;
 }
 
 async function ttsFinished(sessionId: string, useDesktop?: boolean): Promise<boolean> {
@@ -132,7 +171,7 @@ async function ttsFinished(sessionId: string, useDesktop?: boolean): Promise<boo
 }
 
 async function retrieveTTSAudio(text: string, voice?: Voice): Promise<string> {
-  const audioPrefix = Date.now().toString();
+  const audioPrefix = getFilePrefix();
   const useDesktop = RVC_VOICES.has(voice);
   const ttsPathToUse = useDesktop ? DESKTOP_TTS_PATH : LOCAL_TTS_PATH;
   const ttsAudioPathSuffix = `${audioPrefix}-tts_output.wav`;
@@ -143,7 +182,7 @@ async function retrieveTTSAudio(text: string, voice?: Voice): Promise<string> {
   const rvcLocalPath = path.join(LOCAL_TTS_PATH, rvcAudioPathSuffix)
   const sessionId = uuid();
 
-  const body = generateAPIBody(sessionId, text, ttsAudioPath, rvcAudioPath, voice);
+  const body = generateTTSBody(sessionId, text, ttsAudioPath, rvcAudioPath, voice);
 
   const response = await fetch(useDesktop ? DESKTOP_APPLIO_TTS_URL : LOCAL_APPLIO_TTS_URL, {
     method: "POST",
@@ -174,6 +213,47 @@ async function retrieveTTSAudio(text: string, voice?: Voice): Promise<string> {
 
 async function playTTS(text: string, broadcast: DiscordBroadcast, voice?: Voice): Promise<void> {
   const audioPath = await retrieveTTSAudio(text, voice);
+  broadcast.playFileAudio(audioPath);
+}
+
+async function inferAudio(desktopPath: string, voice?: Voice): Promise<string> {
+  const audioPrefix = getFilePrefix();
+  const outputAudioSuffx = `${audioPrefix}-infer_output.wav`;
+  const desktopOutputAudioPath = path.join(DESKTOP_INFER_PATH, outputAudioSuffx);
+  const localOutputAudioPath = path.join(LOCAL_INFER_PATH, outputAudioSuffx);
+  const sessionId = uuid();
+
+  const body = generateInferBody(sessionId, desktopPath, desktopOutputAudioPath, voice);
+
+  const response = await fetch(DESKTOP_APPLIO_TTS_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (response.status !== 200) {
+    console.log("Failed when creating TTS");
+    return;
+  }
+  let tries = 0;
+
+  let isTTSFinished = await ttsFinished(sessionId, true);
+  while (!isTTSFinished) {
+    tries++;
+    console.log('Waiting for tts to be finished');
+    await sleep(1000);
+    if (tries > 6000) {
+      console.log('Tried 10 times and TTS was not done, aborting');
+      return;
+    }
+    isTTSFinished = await ttsFinished(sessionId, true);
+  }
+  return localOutputAudioPath;
+}
+
+async function playInfer(desktopPath: string, broadcast: DiscordBroadcast, voice?: Voice): Promise<void> {
+  const audioPath = await inferAudio(desktopPath, voice);
   broadcast.playFileAudio(audioPath);
 }
 
@@ -220,6 +300,19 @@ As opcoes de [nacionalidade]:
     if (text) {
       // @ts-ignore
       playTTS(text, broadcast, MESSAGE_PREFIX_TO_VOICE[acceptedPrefix]);
+    } else {
+      // Check if a file was sent so we can infer
+      const attachment = message.attachments.first();
+      if (!attachment || !attachment.contentType.includes('audio')) return true;
+      const response = await fetch(attachment.url);
+      const audioPrefix = getFilePrefix();
+      const originalAudioPathSuffix = `${audioPrefix}-infer-original.wav`;
+      const downloadDestination = path.join(LOCAL_INFER_PATH, originalAudioPathSuffix);
+      const fileStream = fs.createWriteStream(downloadDestination, { flags: 'wx' });
+      await finished(Readable.fromWeb(response.body).pipe(fileStream));
+      const desktopInferPath = path.join(DESKTOP_INFER_PATH, originalAudioPathSuffix);
+      // @ts-ignore
+      playInfer(desktopInferPath, broadcast, MESSAGE_PREFIX_TO_VOICE[acceptedPrefix]);
     }
     return true;
   }
@@ -229,14 +322,12 @@ As opcoes de [nacionalidade]:
     const ttsMessages = multiTTSMessage.split("/");
     const audios = [];
     for (const ttsMessage of ttsMessages) {
-      console.log(ttsMessage);
       for (const acceptedPrefix of acceptedPrefixes) {
         if (!ttsMessage.startsWith(acceptedPrefix)) continue;
         const text = ttsMessage.replace(acceptedPrefix, "").trim();
         if (!text) break;
         // @ts-ignore
         const ttsAudio = await retrieveTTSAudio(text, MESSAGE_PREFIX_TO_VOICE[acceptedPrefix]);
-        console.log(text, ttsAudio);
         audios.push(ttsAudio);
       }
     }
