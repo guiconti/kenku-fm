@@ -6,6 +6,63 @@ import { DiscordBroadcast } from "./broadcast/DiscordBroadcast";
 const { Readable } = require('stream');
 import { finished } from 'stream/promises';
 
+interface Options {
+  hold: boolean;
+  save: string | null;
+}
+
+const SAVE_REGEX = new RegExp(/\[save=(.*?)\]/gm);
+const HOLD_REGEX = new RegExp(/\[hold\]/gm);
+const SAVED_TTS_JSON_PATH = path.join(process.cwd(), '/src/assets/audios/saved.json');
+let savedAudios: { [key: string]: string } = {};
+const rawData = fs.readFileSync(SAVED_TTS_JSON_PATH);
+let jsonData = {};
+if (rawData) {
+  try {
+    jsonData = JSON.parse(rawData.toString());
+    savedAudios = jsonData;
+  } catch (err) {
+    console.log(err);
+  }
+}
+
+const CACHED_TTS_JSON_PATH = path.join(process.cwd(), '/src/assets/audios/cached.json');
+let cachedAudios: { [key: string]: string } = {};
+const cachedRawData = fs.readFileSync(CACHED_TTS_JSON_PATH);
+let cachedJsonData = {};
+if (cachedRawData) {
+  try {
+    cachedJsonData = JSON.parse(cachedRawData.toString());
+    cachedAudios = cachedJsonData;
+  } catch (err) {
+    console.log(err);
+  }
+}
+
+async function updateSavedAudios() {
+  fs.writeFile(SAVED_TTS_JSON_PATH, JSON.stringify(savedAudios), () => { });
+}
+
+function saveAudio(name: string, audioName: string) {
+  savedAudios[name] = audioName;
+  updateSavedAudios();
+}
+
+function generateCacheKey(input: string, voice?: Voice) {
+  return `v${TTS_VERSION}-${voice ?? Voice.DEFAULT}-${input}`;
+}
+
+function cacheAudio(key: string, audioName: string) {
+  cachedAudios[key] = audioName;
+}
+
+async function updateCachedAudios() {
+  fs.writeFile(CACHED_TTS_JSON_PATH, JSON.stringify(cachedAudios), () => { });
+}
+
+// setInterval(updateCachedAudios, 1000 * 60 * 15);
+setInterval(updateCachedAudios, 1000);
+
 const LOCAL_TTS_PATH = path.join(process.cwd(), '/src/assets/audios/tts');
 const DESKTOP_TTS_PATH = String.raw`Z:\github\kenku-fm\src\assets\audios\tts`;
 
@@ -171,6 +228,10 @@ async function ttsFinished(sessionId: string, useDesktop?: boolean): Promise<boo
 }
 
 async function retrieveTTSAudio(text: string, voice?: Voice): Promise<string> {
+  const cacheKey = generateCacheKey(text, voice);
+  if (cachedAudios[cacheKey]) {
+    return cachedAudios[cacheKey];
+  }
   const audioPrefix = getFilePrefix();
   const useDesktop = RVC_VOICES.has(voice);
   const ttsPathToUse = useDesktop ? DESKTOP_TTS_PATH : LOCAL_TTS_PATH;
@@ -208,12 +269,19 @@ async function retrieveTTSAudio(text: string, voice?: Voice): Promise<string> {
     }
     isTTSFinished = await ttsFinished(sessionId, useDesktop);
   }
-  return RVC_VOICES.has(voice) ? rvcLocalPath : ttsLocalPath;
+  const audioPath = RVC_VOICES.has(voice) ? rvcLocalPath : ttsLocalPath;
+  cacheAudio(cacheKey, audioPath);
+  return audioPath;
 }
 
-async function playTTS(text: string, broadcast: DiscordBroadcast, voice?: Voice): Promise<void> {
+async function playTTS(text: string, broadcast: DiscordBroadcast, options: Options, voice?: Voice): Promise<void> {
   const audioPath = await retrieveTTSAudio(text, voice);
-  broadcast.playFileAudio(audioPath);
+  if (options.save) {
+    saveAudio(options.save, audioPath);
+  }
+  if (!options.hold) {
+    broadcast.playFileAudio(audioPath);
+  }
 }
 
 async function inferAudio(desktopPath: string, voice?: Voice): Promise<string> {
@@ -252,9 +320,29 @@ async function inferAudio(desktopPath: string, voice?: Voice): Promise<string> {
   return localOutputAudioPath;
 }
 
-async function playInfer(desktopPath: string, broadcast: DiscordBroadcast, voice?: Voice): Promise<void> {
+async function playInfer(desktopPath: string, broadcast: DiscordBroadcast, options: Options, voice?: Voice): Promise<void> {
   const audioPath = await inferAudio(desktopPath, voice);
-  broadcast.playFileAudio(audioPath);
+  if (options.save) {
+    saveAudio(options.save, audioPath);
+  }
+  if (!options.hold) {
+    broadcast.playFileAudio(audioPath);
+  }
+}
+
+function splitTextAndOptions(rawMessage: string): [string, Options] {
+  let text = rawMessage;
+  const options: Options = { hold: false, save: null };
+  const saveMatch = SAVE_REGEX.exec(text);
+  if (saveMatch) {
+    options.save = saveMatch[1];
+    text = text.replace(SAVE_REGEX, "");
+  }
+  if (HOLD_REGEX.test(text)) {
+    options.hold = true;
+    text = text.replace(HOLD_REGEX, "");
+  }
+  return [text.trim().toLowerCase(), options];
 }
 
 const acceptedPrefixes = [TTS_PREFIX, LULA_PREFIX, BOB_ESPONJA_PREFIX, SILVIO_SANTOS_PREFIX, GOKU_PREFIX];
@@ -273,6 +361,14 @@ Para usar o TTS mande uma mensagem no seguinte formato:
 Note que [sexo] e [nacionalidade] sao opcionais. Por exemplo voce pode usar:
 \`tts Minha mensagem\` ou \`tts [fem] [ita] mensagem\`
 No segundo caso a voz usada sera de uma italiana.
+
+Voce pode adicionar \`[save=nome do audio]\` para salvar esse audio e reenviar no futuro mandando
+\`savedtts nome do audio\`. Um exemplo do uso de save pode ser \`lula tira que eu vou cagar [save=tira que eu vou cagar]\`. Se o nome ja estiver sendo usado eu vou te avisar
+
+Voce pode adicionar \`[hold]\` depois da configuracao de voz para nao enviar o audio. Isso pode ser util se voce quiser salvar mas nao mandar, por exemplo
+\`lula tira que eu vou cagar [save=tira que eu vou cagar] [hold]\`
+
+**OBS: SEXO E NACIONALIDADE AINDA NAO FORAM IMPLEMENTADOS**
 
 O tipo_de_voz tem que ser substituido por uma das seguinte opcoes:
 tts (Default)
@@ -294,12 +390,72 @@ As opcoes de [nacionalidade]:
     return true;
   }
 
+  if (messageContent.startsWith("inferhelp")) {
+    message.channel.send({
+      content: `
+Mande um audio com uma mensagem seguindo as regras do tts para transformar aquele audio na voz.
+A mensagem pode ser por exemplo: \`lula\`. Note que diferente do TTS voce nao precisa mandar a mensagem
+Ja que o audio ja tem a mensagem. Voce pode usar as mesmas funcionalidades do tts como \`lula[fem][ita]\`.
+Para checar as regras do tts mande \`ttshelp\`.
+
+Voce tem opcoes a mais quando mandar um arquivo assim:
+
+Voce pode adicionar \`[save=nome do audio]\` para salvar esse audio e reenviar no futuro mandando
+\`savedtts nome do audio\`. Um exemplo do uso de save pode ser \`lula [save=tira que eu vou cagar]\`. Se o nome ja estiver sendo usado eu vou te avisar
+
+Voce pode adicionar \`hold\` depois da configuracao de voz para nao enviar o audio. Isso pode ser util se voce quiser salvar mas nao mandar, por exemplo
+\`lula [save=tira que eu vou cagar] [hold]\`
+      `, flags: MessageFlags.SuppressNotifications
+    });
+    return true;
+  }
+
+  if (messageContent.startsWith("listtts")) {
+    let audios = "";
+    for (const savedAudio of Object.keys(savedAudios)) {
+      audios += `- ${savedAudio}\n`;
+    }
+    message.channel.send({ content: audios, flags: MessageFlags.SuppressNotifications });
+    return true;
+  }
+
+  if (messageContent.startsWith("savedtts")) {
+    const audioName = messageContent.replace("savedtts", "").trim();
+    if (savedAudios[audioName]) {
+      broadcast.playFileAudio(savedAudios[audioName]);
+    } else {
+      message.channel.send({
+        content: "Audio não encontrado",
+        flags: MessageFlags.SuppressNotifications,
+      });
+    }
+    return true;
+  }
+
+  if (messageContent.startsWith("deletetts")) {
+    const audioName = messageContent.replace("deletetts", "").trim();
+    if (savedAudios[audioName]) {
+      delete savedAudios[audioName];
+      updateSavedAudios();
+      message.channel.send({
+        content: `Audio ${audioName} deletado`,
+        flags: MessageFlags.SuppressNotifications,
+      });
+    } else {
+      message.channel.send({
+        content: "Audio não encontrado",
+        flags: MessageFlags.SuppressNotifications,
+      });
+    }
+    return true;
+  }
+
   for (const acceptedPrefix of acceptedPrefixes) {
     if (!messageContent.startsWith(acceptedPrefix)) continue;
-    const text = messageContent.replace(acceptedPrefix, "").trim();
+    const [text, options] = splitTextAndOptions(messageContent.replace(acceptedPrefix, "").trim());
     if (text) {
       // @ts-ignore
-      playTTS(text, broadcast, MESSAGE_PREFIX_TO_VOICE[acceptedPrefix]);
+      playTTS(text, broadcast, options, MESSAGE_PREFIX_TO_VOICE[acceptedPrefix]);
     } else {
       // Check if a file was sent so we can infer
       const attachment = message.attachments.first();
@@ -312,7 +468,7 @@ As opcoes de [nacionalidade]:
       await finished(Readable.fromWeb(response.body).pipe(fileStream));
       const desktopInferPath = path.join(DESKTOP_INFER_PATH, originalAudioPathSuffix);
       // @ts-ignore
-      playInfer(desktopInferPath, broadcast, MESSAGE_PREFIX_TO_VOICE[acceptedPrefix]);
+      playInfer(desktopInferPath, broadcast, options, MESSAGE_PREFIX_TO_VOICE[acceptedPrefix]);
     }
     return true;
   }
@@ -322,13 +478,27 @@ As opcoes de [nacionalidade]:
     const ttsMessages = multiTTSMessage.split("/");
     const audios = [];
     for (const ttsMessage of ttsMessages) {
+
+      if (ttsMessage.startsWith("savedtts")) {
+        const audioName = ttsMessage.replace("savedtts", "").trim();
+        if (savedAudios[audioName]) {
+          audios.push(savedAudios[audioName]);
+        }
+        continue;
+      }
+
       for (const acceptedPrefix of acceptedPrefixes) {
         if (!ttsMessage.startsWith(acceptedPrefix)) continue;
-        const text = ttsMessage.replace(acceptedPrefix, "").trim();
+        const [text, options] = splitTextAndOptions(ttsMessage.replace(acceptedPrefix, "").trim());
         if (!text) break;
         // @ts-ignore
         const ttsAudio = await retrieveTTSAudio(text, MESSAGE_PREFIX_TO_VOICE[acceptedPrefix]);
-        audios.push(ttsAudio);
+        if (options.save) {
+          saveAudio(options.save, ttsAudio);
+        }
+        if (!options.hold) {
+          audios.push(ttsAudio);
+        }
       }
     }
     if (audios.length > 0) {
