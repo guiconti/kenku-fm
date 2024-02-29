@@ -68,6 +68,7 @@ export class DiscordBroadcast {
   fileAudioPlayerSubscription?: PlayerSubscription;
   currentlyPlaying: boolean;
   queue: Array<string> = [];
+  localFileQueue: Array<string> = [];
   constructor(window: BrowserWindow) {
     this.window = window;
     ipcMain.on("DISCORD_CONNECT", this._handleConnect);
@@ -280,6 +281,10 @@ export class DiscordBroadcast {
   onFileAudioPlayerStatusChange(oldState: AudioPlayerState, newState: AudioPlayerState) {
     if (newState.status === AudioPlayerStatus.Paused || newState.status === AudioPlayerStatus.AutoPaused || newState.status === AudioPlayerStatus.Idle) {
       this.fileAudioPlayer.removeAllListeners('stateChange');
+      if (this.localFileQueue.length > 0) {
+        this.playFileAudio(this.localFileQueue.shift());
+        return;
+      }
       this.switchFileAudioPlayerToAudioPlayer();
     }
   }
@@ -305,7 +310,10 @@ export class DiscordBroadcast {
   }
 
   playFileAudio(audioPath: string) {
-    console.log('Playing', audioPath);
+    if (this.fileAudioPlayer.state.status === AudioPlayerStatus.Buffering || this.fileAudioPlayer.state.status === AudioPlayerStatus.Playing) {
+      this.localFileQueue.push(audioPath);
+      return;
+    }
     this.switchAudioPlayerToFileAudioPlayer();
     const audioResource = createAudioResource(audioPath, { inlineVolume: true });
     audioResource.volume?.setVolume(1);

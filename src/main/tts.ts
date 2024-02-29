@@ -131,7 +131,7 @@ async function ttsFinished(sessionId: string, useDesktop?: boolean): Promise<boo
   return result.includes("process_completed");
 }
 
-async function playTTS(text: string, broadcast: DiscordBroadcast, voice?: Voice): Promise<void> {
+async function retrieveTTSAudio(text: string, voice?: Voice): Promise<string> {
   const audioPrefix = Date.now().toString();
   const useDesktop = RVC_VOICES.has(voice);
   const ttsPathToUse = useDesktop ? DESKTOP_TTS_PATH : LOCAL_TTS_PATH;
@@ -169,7 +169,12 @@ async function playTTS(text: string, broadcast: DiscordBroadcast, voice?: Voice)
     }
     isTTSFinished = await ttsFinished(sessionId, useDesktop);
   }
-  broadcast.playFileAudio(RVC_VOICES.has(voice) ? rvcLocalPath : ttsLocalPath);
+  return RVC_VOICES.has(voice) ? rvcLocalPath : ttsLocalPath;
+}
+
+async function playTTS(text: string, broadcast: DiscordBroadcast, voice?: Voice): Promise<void> {
+  const audioPath = await retrieveTTSAudio(text, voice);
+  broadcast.playFileAudio(audioPath);
 }
 
 const acceptedPrefixes = [TTS_PREFIX, LULA_PREFIX, BOB_ESPONJA_PREFIX, SILVIO_SANTOS_PREFIX, GOKU_PREFIX];
@@ -217,6 +222,29 @@ As opcoes de [nacionalidade]:
       playTTS(text, broadcast, MESSAGE_PREFIX_TO_VOICE[acceptedPrefix]);
     }
     return true;
+  }
+
+  if (messageContent.startsWith("multitts")) {
+    const multiTTSMessage = messageContent.replace("multitts", "").trim();
+    const ttsMessages = multiTTSMessage.split("/");
+    const audios = [];
+    for (const ttsMessage of ttsMessages) {
+      console.log(ttsMessage);
+      for (const acceptedPrefix of acceptedPrefixes) {
+        if (!ttsMessage.startsWith(acceptedPrefix)) continue;
+        const text = ttsMessage.replace(acceptedPrefix, "").trim();
+        if (!text) break;
+        // @ts-ignore
+        const ttsAudio = await retrieveTTSAudio(text, MESSAGE_PREFIX_TO_VOICE[acceptedPrefix]);
+        console.log(text, ttsAudio);
+        audios.push(ttsAudio);
+      }
+    }
+    if (audios.length > 0) {
+      for (const audio of audios) {
+        broadcast.playFileAudio(audio);
+      }
+    }
   }
 
   return false;
