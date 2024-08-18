@@ -87,6 +87,7 @@ const PITCH_EXTRACTION_ALGORITHM = "rmvpe";
 const SPLIT_AUDIO = false;
 const AUTOTUNE = false;
 const CLEAN_AUDIO = true;
+const AUDIO_TYPE = "WAV";
 
 enum Voice {
   DEFAULT = 0,
@@ -171,11 +172,12 @@ function generateTTSBody(sessionId: string, text: string, ttsAudioPath: string, 
       AUTOTUNE,
       CLEAN_AUDIO,
       CLEAN_STRENGTHS[voice ?? Voice.DEFAULT],
+      AUDIO_TYPE,
     ],
     // @ts-ignore
     event_data: null,
-    fn_index: 28,
-    trigger_id: 167,
+    fn_index: 40,
+    trigger_id: 189,
     session_hash: sessionId
   }
 }
@@ -199,11 +201,12 @@ function generateInferBody(sessionId: string, inputPath: string, outputPath: str
       AUTOTUNE,
       CLEAN_AUDIO,
       CLEAN_STRENGTHS[voice ?? Voice.DEFAULT],
+      AUDIO_TYPE,
     ],
     // @ts-ignore
     event_data: null,
-    fn_index: 10,
-    trigger_id: 37,
+    fn_index: 12,
+    trigger_id: 39,
     session_hash: sessionId
   }
 }
@@ -451,6 +454,20 @@ Voce pode adicionar \`hold\` depois da configuracao de voz para nao enviar o aud
     return true;
   }
 
+  if (messageContent.startsWith("savetts")) {
+    const attachment = message.attachments.first();
+    if (!attachment || !attachment.contentType.includes('audio')) return true;
+    const audioName = messageContent.replace("savetts", "").trim();
+    if (!audioName) return true;
+    const response = await fetch(attachment.url);
+    const audioPrefix = getFilePrefix();
+    const originalAudioPathSuffix = `${audioPrefix}-infer-original.wav`;
+    const downloadDestination = path.join(LOCAL_INFER_PATH, originalAudioPathSuffix);
+    const fileStream = fs.createWriteStream(downloadDestination, { flags: 'wx' });
+    await finished(Readable.fromWeb(response.body).pipe(fileStream));
+    saveAudio(audioName, downloadDestination);
+  }
+
   if (messageContent.startsWith("savedtts")) {
     const audioName = messageContent.replace("savedtts", "").trim();
     if (savedAudios[audioName]) {
@@ -462,7 +479,6 @@ Voce pode adicionar \`hold\` depois da configuracao de voz para nao enviar o aud
           broadcast.playFileAudio(singleAudioPath);
         }
       }
-      return;
     } else {
       message.channel.send({
         content: "Audio não encontrado",
